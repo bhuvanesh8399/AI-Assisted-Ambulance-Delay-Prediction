@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal, Dict, Any
 from datetime import datetime
 
 
@@ -40,3 +40,31 @@ class LatestGPSRes(BaseModel):
     lat: float
     lon: float
     timestamp: datetime
+
+
+RouteType = Literal["urban", "highway", "mixed"]
+
+
+class RouteResponse(BaseModel):
+    trip_id: str
+    distance_km: float
+    duration_sec: int
+    polyline_geojson: Any
+    route_type: Literal["urban", "highway", "mixed"]
+
+
+class HospitalCreate(BaseModel):
+    id: str
+    name: str
+    lat: float
+    lon: float
+
+
+class HospitalOut(BaseModel):
+    id: str
+    name: str
+    lat: float
+    lon: float
+
+    class Config:
+        from_attributes = True

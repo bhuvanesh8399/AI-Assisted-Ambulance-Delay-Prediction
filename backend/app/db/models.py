@@ -43,3 +43,12 @@ class GPSPoint(Base):
 # Indexes for O(1)-ish latest queries and fast trip filtering
 Index("ix_gps_trip_ts_desc", GPSPoint.trip_id, GPSPoint.timestamp.desc())
 Index("ix_gps_trip_seq", GPSPoint.trip_id, GPSPoint.seq)
+
+# Hospital metadata for destination routing.
+class Hospital(Base):
+    __tablename__ = "hospitals"
+
+    id = Column(String, primary_key=True, index=True)   # ex: "HOSP-07"
+    name = Column(String, nullable=False)
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
