@@ -1,0 +1,21 @@
+{
+  "model_features": [
+    "distance_km",
+    "hour_of_day",
+    "day_of_week",
+    "route_type_encoded",
+    "junction_count",
+    "historical_delay_factor"
+  ],
+  "target": "delay_sec",
+  "metrics": {
+    "linear_regression": {
+      "mae": 123.78291708471376,
+      "rmse": 175.2007631138828
+    },
+    "random_forest": {
+      "mae": 63.816100000000006,
+      "rmse": 88.82472107963525
+    }
+  }
+}
