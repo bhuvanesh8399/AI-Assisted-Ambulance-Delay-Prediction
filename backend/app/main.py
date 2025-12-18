@@ -4,6 +4,7 @@ from app.db.session import Base, engine
 from app.api import trip, gps
 from app.api import route, hospital  # NEW
 from app.api import predict
+from app.api.corridor import router as corridor_router
 from app.ml.model_store import ModelStore
 from app.ml.predictor import Predictor
 
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(gps.router, prefix="/api")
     app.include_router(route.router, prefix="/api")      # NEW
     app.include_router(hospital.router, prefix="/api")   # NEW
+    app.include_router(corridor_router)                  # already prefixed
     app.include_router(predict.router)                   # already prefixed
 
     return app
