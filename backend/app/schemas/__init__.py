@@ -24,3 +24,10 @@ from .corridor import (
     CorridorPlanRequest,
     CorridorPlanResponse,
 )
+
+# Dashboard schemas (Section 5)
+from .dashboard import (
+    JunctionWindow,
+    HospitalDashboardResponse,
+    TrafficDashboardResponse,
+)
