@@ -1,21 +1,51 @@
-import { useEffect } from "react";
+// src/hooks/usePolling.ts
+import { useEffect, useRef } from "react";
 
-export function usePolling(fn: () => void | Promise<void>, intervalMs: number, deps: any[] = []) {
+type PollFn = (ctx: { signal: AbortSignal }) => Promise<void> | void;
+
+export function usePolling(opts: {
+  enabled: boolean;
+  intervalMs: number;
+  poll: PollFn;
+}) {
+  const { enabled, intervalMs, poll } = opts;
+
+  const abortRef = useRef<AbortController | null>(null);
+  const timerRef = useRef<number | null>(null);
+
   useEffect(() => {
-    let alive = true;
+    if (!enabled) return;
 
-    const tick = async () => {
-      if (!alive) return;
-      await fn();
+    let stopped = false;
+
+    const start = async () => {
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
+      const runOnce = async () => {
+        if (stopped) return;
+        try {
+          await poll({ signal: abortRef.current!.signal });
+        } catch {
+          // Poll caller handles UI errors; we stay silent here.
+        }
+      };
+
+      // run immediately, then interval
+      await runOnce();
+
+      timerRef.current = window.setInterval(() => {
+        runOnce();
+      }, intervalMs);
     };
 
-    tick();
-    const id = setInterval(tick, intervalMs);
+    start();
 
     return () => {
-      alive = false;
-      clearInterval(id);
+      stopped = true;
+      abortRef.current?.abort();
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [enabled, intervalMs, poll]);
 }
