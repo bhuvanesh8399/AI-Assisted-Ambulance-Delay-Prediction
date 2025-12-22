@@ -1,46 +1,35 @@
+from __future__ import annotations
+
 from fastapi import FastAPI
 
-from app.db.session import Base, engine
-from app.api import trip, gps
-from app.api import route, hospital  # NEW
-from app.api import predict
-from app.api.dashboard import router as dashboard_router
-from app.api.corridor import router as corridor_router
-from app.ml.model_store import ModelStore
-from app.ml.predictor import Predictor
+from .db import Base, engine
+from .api.trip import router as trip_router
+from .api.gps import router as gps_router
+from .api.hospital import router as hospital_router
+from .api.snapshot import router as snapshot_router
+from .api.ws_routes import router as ws_router
+from .api.dashboard import router as dashboard_router
+from .api.route import router as route_router
+from .api.corridor import router as corridor_router
+from .api.predict import router as predict_router
+
+app = FastAPI(title="AI-Assisted Ambulance Delay Prediction API")
+
+# DB init (safe for demo; for prod prefer alembic migrations)
+Base.metadata.create_all(bind=engine)
+
+# Routers
+app.include_router(trip_router)
+app.include_router(gps_router)
+app.include_router(hospital_router)
+app.include_router(snapshot_router)
+app.include_router(ws_router)
+app.include_router(dashboard_router)
+app.include_router(route_router)
+app.include_router(corridor_router)
+app.include_router(predict_router)
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="AI-Assisted Ambulance Delay Prediction API")
-
-    # Create tables (simple dev approach). In prod, you’d use Alembic migrations.
-    Base.metadata.create_all(bind=engine)
-
-    app.include_router(trip.router, prefix="/api")
-    app.include_router(gps.router, prefix="/api")
-    app.include_router(route.router, prefix="/api")      # NEW
-    app.include_router(hospital.router, prefix="/api")   # NEW
-    app.include_router(corridor_router)                  # already prefixed
-    app.include_router(dashboard_router)                 # already prefixed
-    app.include_router(predict.router)                   # already prefixed
-
-    return app
-
-
-predictor_instance: Predictor | None = None
-
-
-def init_predictor():
-    global predictor_instance
-    store = ModelStore()
-    store.load()
-    predictor_instance = Predictor(store)
-
-
-app = create_app()
-
-# Eagerly load models at import time; adjust to startup event if desired.
-try:
-    init_predictor()
-except Exception:
-    predictor_instance = None
+@app.get("/health")
+def health():
+    return {"ok": True}

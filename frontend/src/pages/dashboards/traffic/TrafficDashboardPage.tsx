@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "../../../components/layout/AppShell";
-import { usePolling } from "../../../hooks/usePolling";
 import { fetchTrafficDashboard } from "../../../services/dashboard/dashboardService";
 import type { TrafficDashboardResponse } from "../../../services/dashboard/types";
+import { connectTripWS } from "../../../services/realtime";
+import type { RealtimeMode } from "../../../services/realtime";
 
 const pill = (p: string) => {
   if (p === "high") return "bg-red-600 text-white";
@@ -15,16 +16,42 @@ export default function TrafficDashboardPage() {
   const [data, setData] = useState<TrafficDashboardResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [onlyHigh, setOnlyHigh] = useState(false);
+  const [mode, setMode] = useState<RealtimeMode>("polling");
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
 
-  usePolling(async () => {
+  const fetchPolling = async () => {
     try {
       setErr(null);
       const res = await fetchTrafficDashboard(tripId);
       setData(res);
+      setLastUpdated(Date.now());
     } catch (e: any) {
       setErr(e?.message || "Failed to load");
     }
-  }, 2500, [tripId]);
+  };
+
+  useEffect(() => {
+    if (!tripId || mode !== "polling") return;
+    fetchPolling();
+    const t = window.setInterval(fetchPolling, 2500);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, mode]);
+
+  useEffect(() => {
+    if (!tripId || mode !== "ws") return;
+    const cleanup = connectTripWS(
+      tripId,
+      (msg) => {
+        if (msg?.type === "traffic_dashboard") {
+          setData(msg.data);
+          setLastUpdated(Date.now());
+        }
+      },
+      () => setMode("polling")
+    );
+    return cleanup;
+  }, [tripId, mode]);
 
   const junctions = (data?.junctions ?? []).slice().sort(
     (a, b) => new Date(a.window_start).getTime() - new Date(b.window_start).getTime()
@@ -84,7 +111,23 @@ export default function TrafficDashboardPage() {
             Copy Corridor
           </button>
 
-          <span className="text-xs text-zinc-400">Auto refresh: 2.5s</span>
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <span>Auto refresh: 2.5s</span>
+            <span>Realtime:</span>
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as RealtimeMode)}
+              className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-zinc-200"
+            >
+              <option value="polling">Polling</option>
+              <option value="ws">WebSocket</option>
+            </select>
+            {lastUpdated ? (
+              <span className="text-[11px] text-zinc-500">
+                Age: {Math.floor((Date.now() - lastUpdated) / 1000)}s
+              </span>
+            ) : null}
+          </div>
         </div>
 
         {err && <div className="p-3 rounded-lg bg-red-500/10 text-red-200 border border-red-500/30">{err}</div>}

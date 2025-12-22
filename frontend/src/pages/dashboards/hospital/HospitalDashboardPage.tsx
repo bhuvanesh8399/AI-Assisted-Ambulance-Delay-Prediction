@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "../../../components/layout/AppShell";
 import LivePill from "../../../components/ui/LivePill";
-import { usePolling } from "../../../hooks/usePolling";
 import { useEmaHistory } from "../../../hooks/useEmaHistory";
 import { formatCountdown } from "../../../utils/time";
 import { fetchHospitalDashboard } from "../../../services/dashboard/dashboardService";
 import type { HospitalDashboardResponse } from "../../../services/dashboard/types";
+import { connectTripWS } from "../../../services/realtime";
+import type { RealtimeMode } from "../../../services/realtime";
 
 const riskStyle = (risk: string) => {
   if (risk === "high") return "bg-red-500/15 text-red-200 border-red-500/30";
@@ -17,18 +18,44 @@ export default function HospitalDashboardPage() {
   const [tripId, setTripId] = useState("demo-trip");
   const [data, setData] = useState<HospitalDashboardResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [mode, setMode] = useState<RealtimeMode>("polling");
+  const [lastUpdated, setLastUpdated] = useState<number>(0);
 
   const etaHistory = useEmaHistory(data?.eta_final_sec ?? null, 8);
 
-  usePolling(async () => {
+  const fetchPolling = async () => {
     try {
       setErr(null);
       const res = await fetchHospitalDashboard(tripId);
       setData(res);
+      setLastUpdated(Date.now());
     } catch (e: any) {
       setErr(e?.message || "Failed to load");
     }
-  }, 2500, [tripId]);
+  };
+
+  useEffect(() => {
+    if (!tripId || mode !== "polling") return;
+    fetchPolling();
+    const t = window.setInterval(fetchPolling, 2500);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId, mode]);
+
+  useEffect(() => {
+    if (!tripId || mode !== "ws") return;
+    const cleanup = connectTripWS(
+      tripId,
+      (msg) => {
+        if (msg?.type === "hospital_dashboard") {
+          setData(msg.data);
+          setLastUpdated(Date.now());
+        }
+      },
+      () => setMode("polling")
+    );
+    return cleanup;
+  }, [tripId, mode]);
 
   const spike =
     etaHistory.length >= 2 &&
@@ -92,6 +119,16 @@ export default function HospitalDashboardPage() {
           >
             Copy ETA Msg
           </button>
+
+          <div className="text-xs text-zinc-400">Realtime:</div>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as RealtimeMode)}
+            className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-zinc-200"
+          >
+            <option value="polling">Polling</option>
+            <option value="ws">WebSocket</option>
+          </select>
         </div>
       </div>
 
@@ -110,7 +147,8 @@ export default function HospitalDashboardPage() {
             {formatCountdown(data?.countdown_sec ?? 0)}
           </div>
           <div className="mt-2 text-xs text-zinc-400">
-            Last update: {data?.last_updated ? new Date(data.last_updated).toLocaleTimeString() : "-"}
+            Last update: {data?.last_updated ? new Date(data.last_updated).toLocaleTimeString() : "-"}{" "}
+            {lastUpdated ? `(age ${Math.floor((Date.now() - lastUpdated) / 1000)}s)` : ""}
           </div>
           <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
             <div className="h-full bg-cyan-400/80" style={{ width: `${pct}%` }} />

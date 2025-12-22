@@ -13,6 +13,7 @@ class TripStartIn(BaseModel):
     destination_hospital_id: str
     start_lat: float
     start_lon: float
+    # Optional: if you can provide destination coordinates now, it enables NEAR_ARRIVAL auto detection.
     dest_lat: Optional[float] = None
     dest_lon: Optional[float] = None
 
@@ -39,6 +40,7 @@ class GPSUpdateOut(BaseModel):
 
 class DestinationUpdateIn(BaseModel):
     destination_hospital_id: str
+    # optional coordinates if known
     dest_lat: Optional[float] = None
     dest_lon: Optional[float] = None
 
@@ -83,10 +85,14 @@ class TripSnapshotOut(BaseModel):
     last_gps_at: datetime
     last_update_at: datetime
 
+    # Prediction outputs (never null)
     eta_final_seconds: int = 0
     risk_level: str = "UNKNOWN"
 
+    # Corridor (never null)
     corridor: CorridorSummary
+
+    # Optional ACK info
     acks: List[Dict[str, Any]] = Field(default_factory=list)
 
 

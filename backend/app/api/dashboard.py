@@ -41,13 +41,22 @@ def hospital_dashboard(trip_id: str):
     if not p or "eta_final_sec" not in p:
         raise HTTPException(status_code=404, detail="No prediction found for trip_id")
 
-    return build_hospital_dashboard(
+    payload = build_hospital_dashboard(
         trip_id,
         eta_final_sec=p["eta_final_sec"],
         eta_baseline_sec=p.get("eta_baseline_sec"),
         delay_pred_sec=p.get("delay_pred_sec"),
         delay_risk=p.get("delay_risk", "low"),
     )
+
+    try:
+        from app.realtime.publish import publish_trip_update
+
+        publish_trip_update(trip_id, {"type": "hospital_dashboard", "data": payload.dict()})
+    except Exception:
+        pass
+
+    return payload
 
 
 @router.get("/traffic/{trip_id}", response_model=TrafficDashboardResponse)
@@ -65,9 +74,18 @@ def traffic_dashboard(trip_id: str):
     if not p or "eta_final_sec" not in p:
         raise HTTPException(status_code=404, detail="No prediction found for trip_id")
 
-    return build_traffic_dashboard(
+    payload = build_traffic_dashboard(
         trip_id,
         eta_final_sec=p["eta_final_sec"],
         delay_risk=p.get("delay_risk", "low"),
         junctions=corridor or [],
     )
+
+    try:
+        from app.realtime.publish import publish_trip_update
+
+        publish_trip_update(trip_id, {"type": "traffic_dashboard", "data": payload.dict()})
+    except Exception:
+        pass
+
+    return payload
