@@ -1,0 +1,36 @@
+{
+  "@@locale": "en",
+  "language": "Language",
+  "setupTitle": "Setup",
+  "setupHint": "Enter ambulance ID and backend URL.",
+  "ambulanceId": "Ambulance ID",
+  "backendBaseUrl": "Backend Base URL",
+  "backendHint": "Example: http://127.0.0.1:8000",
+  "saveAndContinue": "Save & Continue",
+  "saving": "Saving...",
+  "fillAllFields": "Please fill all fields",
+
+  "startTripTitle": "Start Trip",
+  "startTripHint": "Select destination hospital to begin.",
+  "destinationHospital": "Destination Hospital",
+  "destinationHint": "Example: HOSP-07",
+  "startTrip": "Start Trip",
+
+  "liveTripTitle": "Live Trip",
+  "tripId": "Trip ID",
+  "finalEta": "Final ETA",
+  "risk": "Risk",
+  "status": "Status",
+  "enRoute": "EN ROUTE",
+  "nearArrival": "NEAR ARRIVAL",
+  "arrived": "ARRIVED",
+
+  "connectivity": "Connectivity",
+  "online": "ONLINE",
+  "weak": "WEAK",
+  "offline": "OFFLINE",
+
+  "callHospital": "Call Hospital",
+  "arrivedAction": "Arrived",
+  "dialerNotAvailable": "Dialer not available on this device"
+}

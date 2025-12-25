@@ -1,0 +1,36 @@
+{
+  "@@locale": "ta",
+  "language": "மொழி",
+  "setupTitle": "அமைப்பு",
+  "setupHint": "ஆம்புலன்ஸ் ஐடி மற்றும் backend URL ஐ உள்ளிடுங்கள்.",
+  "ambulanceId": "ஆம்புலன்ஸ் ஐடி",
+  "backendBaseUrl": "Backend அடிப்படை URL",
+  "backendHint": "உதா: http://127.0.0.1:8000",
+  "saveAndContinue": "சேமித்து தொடரவும்",
+  "saving": "சேமிக்கிறது...",
+  "fillAllFields": "அனைத்து புலங்களையும் நிரப்பவும்",
+
+  "startTripTitle": "பயணம் தொடங்கு",
+  "startTripHint": "இலக்கு மருத்துவமனை தேர்வு செய்யவும்.",
+  "destinationHospital": "இலக்கு மருத்துவமனை",
+  "destinationHint": "உதா: HOSP-07",
+  "startTrip": "பயணம் தொடங்கு",
+
+  "liveTripTitle": "நேரடி பயணம்",
+  "tripId": "பயண ஐடி",
+  "finalEta": "இறுதி ETA",
+  "risk": "அபாயம்",
+  "status": "நிலை",
+  "enRoute": "செல்லும் வழியில்",
+  "nearArrival": "விரைவில் வருகை",
+  "arrived": "வந்தடைந்தது",
+
+  "connectivity": "இணைப்பு",
+  "online": "ஆன்லைன்",
+  "weak": "பலவீனம்",
+  "offline": "ஆஃப்லைன்",
+
+  "callHospital": "மருத்துவமனைக்கு அழை",
+  "arrivedAction": "வந்தடைந்தேன்",
+  "dialerNotAvailable": "இந்த சாதனத்தில் dialer இல்லை"
+}
