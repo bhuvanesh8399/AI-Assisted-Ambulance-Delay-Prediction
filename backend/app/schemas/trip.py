@@ -85,6 +85,22 @@ class TripSnapshotOut(BaseModel):
 
     eta_final_seconds: int = 0
     risk_level: str = "UNKNOWN"
+    live_state: str = "OFFLINE"
+    ambulance_label: str = "Ambulance"
+    destination_hospital_name: Optional[str] = None
+    current_lat: Optional[float] = None
+    current_lon: Optional[float] = None
+    destination_lat: Optional[float] = None
+    destination_lon: Optional[float] = None
+    speed_kmph: Optional[float] = None
+    distance_remaining_km: Optional[float] = None
+    eta_osrm_seconds: int = 0
+    predicted_delay_seconds: int = 0
+    confidence_score: float = 0.0
+    delay_reason: str = "Prediction unavailable"
+    corridor_windows: List[Dict[str, Any]] = Field(default_factory=list)
+    events: List[Dict[str, Any]] = Field(default_factory=list)
+    gps_updates_count: int = 0
 
     corridor: CorridorSummary
     acks: List[Dict[str, Any]] = Field(default_factory=list)

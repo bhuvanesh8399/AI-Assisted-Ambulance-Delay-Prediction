@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:ambulance_app/core/i18n/app_localizations.dart';
 
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/status_chip.dart';
-import '../settings/language_sheet.dart';
 
 enum Connectivity { online, weak, offline }
 
@@ -12,11 +10,11 @@ class LiveTripPage extends StatefulWidget {
   const LiveTripPage({
     super.key,
     required this.tripId,
-    required this.onChangeLocale,
+    required this.config,
   });
 
   final String tripId;
-  final ValueChanged<Locale> onChangeLocale;
+  final dynamic config; // not used yet, injected for future use
 
   @override
   State<LiveTripPage> createState() => _LiveTripPageState();
@@ -28,14 +26,6 @@ class _LiveTripPageState extends State<LiveTripPage> {
 
   String get _fakeEta => '--:--';
   String get _fakeRisk => '—';
-
-  void _openLanguage() {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => LanguageSheet(onSelect: widget.onChangeLocale),
-    );
-  }
 
   Color _connColor(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -61,7 +51,6 @@ class _LiveTripPageState extends State<LiveTripPage> {
   }
 
   void _callHospitalPlaceholder() {
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context)!.dialerNotAvailable)),
     );
@@ -69,7 +58,6 @@ class _LiveTripPageState extends State<LiveTripPage> {
 
   void _markArrivedPlaceholder() {
     setState(() => _status = TripStatus.arrived);
-    HapticFeedback.mediumImpact();
   }
 
   @override
@@ -79,13 +67,6 @@ class _LiveTripPageState extends State<LiveTripPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(t.liveTripTitle),
-        actions: [
-          IconButton(
-            onPressed: _openLanguage,
-            icon: const Icon(Icons.translate),
-            tooltip: t.language,
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

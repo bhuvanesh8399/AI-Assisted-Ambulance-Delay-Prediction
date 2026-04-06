@@ -1,15 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "../../../components/layout/AppShell";
+import { useFrontendLocale } from "../../../hooks/useFrontendLocale";
+import { useLiveStatus } from "../../../hooks/useLiveStatus";
 import { fetchTrafficDashboard } from "../../../services/dashboard/dashboardService";
 import type { TrafficDashboardResponse } from "../../../services/dashboard/types";
 import { connectTripWS } from "../../../services/realtime";
 import type { RealtimeMode } from "../../../services/realtime";
 
-const pill = (p: string) => {
-  if (p === "high") return "bg-red-600 text-white";
-  if (p === "medium") return "bg-yellow-400 text-black";
-  return "bg-green-600 text-white";
-};
+type DemoVariant = "normal" | "delay" | "near-arrival" | "reroute";
+
+function liveStateClass(liveState: "live" | "stale" | "offline") {
+  if (liveState === "live") return "live-banner__status live-banner__status--live";
+  if (liveState === "stale") return "live-banner__status live-banner__status--stale";
+  return "live-banner__status live-banner__status--offline";
+}
+
+function riskChip(risk: string) {
+  if (risk === "high") return "status-chip status-chip--high";
+  if (risk === "medium") return "status-chip status-chip--medium";
+  return "status-chip status-chip--low";
+}
 
 export default function TrafficDashboardPage() {
   const [tripId, setTripId] = useState("demo-trip");
@@ -17,26 +27,33 @@ export default function TrafficDashboardPage() {
   const [err, setErr] = useState<string | null>(null);
   const [onlyHigh, setOnlyHigh] = useState(false);
   const [mode, setMode] = useState<RealtimeMode>("polling");
+  const [pollingMs, setPollingMs] = useState(3000);
   const [lastUpdated, setLastUpdated] = useState<number>(0);
+  const [loading, setLoading] = useState(false);
+  const [demoMode, setDemoMode] = useState(true);
+  const [variant, setVariant] = useState<DemoVariant>("normal");
+  const { locale, setLocale } = useFrontendLocale("en");
 
   const fetchPolling = async () => {
     try {
+      setLoading(true);
       setErr(null);
       const res = await fetchTrafficDashboard(tripId);
       setData(res);
       setLastUpdated(Date.now());
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load");
+    } catch (error: any) {
+      setErr(error?.message || "Failed to load");
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!tripId || mode !== "polling") return;
     fetchPolling();
-    const t = window.setInterval(fetchPolling, 2500);
-    return () => window.clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripId, mode]);
+    const timer = window.setInterval(fetchPolling, pollingMs);
+    return () => window.clearInterval(timer);
+  }, [tripId, mode, pollingMs]);
 
   useEffect(() => {
     if (!tripId || mode !== "ws") return;
@@ -56,136 +73,209 @@ export default function TrafficDashboardPage() {
   const junctions = (data?.junctions ?? []).slice().sort(
     (a, b) => new Date(a.window_start).getTime() - new Date(b.window_start).getTime()
   );
-  const filtered = onlyHigh ? junctions.filter((j) => j.priority === "high") : junctions;
+  const filtered = onlyHigh ? junctions.filter((junction) => junction.priority === "high") : junctions;
   const now = Date.now();
-  const next = filtered.find((j) => new Date(j.window_end).getTime() > now) || null;
+  const next = filtered.find((junction) => new Date(junction.window_end).getTime() > now) || null;
   const nextInSec = next ? Math.max(0, Math.floor((new Date(next.window_start).getTime() - now) / 1000)) : null;
 
+  const { liveState, ageMs } = useLiveStatus({
+    lastUpdatedAt: lastUpdated || null,
+    staleAfterMs: pollingMs * 2,
+    offlineAfterMs: pollingMs * 6,
+  });
+
+  const surfaceLiveState = liveState === "LIVE" ? "live" : liveState === "STALE" ? "stale" : "offline";
+
+  const scenario = useMemo(() => {
+    if (variant === "near-arrival") {
+      return { nextJunction: "Hospital Entry Gate", nextWindow: 52, distance: "1.1 km", speed: "20 km/h", delay: "0m" };
+    }
+    if (variant === "delay") {
+      return { nextJunction: next?.name ?? "Collector Office Junction", nextWindow: Math.max(45, (nextInSec ?? 240) - 60), distance: "7.4 km", speed: "28 km/h", delay: "5m" };
+    }
+    if (variant === "reroute") {
+      return { nextJunction: "Court Road Split", nextWindow: 258, distance: "8.4 km", speed: "36 km/h", delay: "3m" };
+    }
+    return { nextJunction: next?.name ?? "Collector Office Junction", nextWindow: nextInSec ?? 240, distance: "6.8 km", speed: "42 km/h", delay: "2m" };
+  }, [next?.name, nextInSec, variant]);
+
+  const alerts = [
+    err
+      ? { id: "error", tone: "HIGH", title: "Dashboard error", message: err, time: "Now" }
+      : null,
+    {
+      id: "window",
+      tone: scenario.nextWindow < 180 ? "HIGH" : "INFO",
+      title: "Next corridor window",
+      message: `${scenario.nextJunction} opens in ${Math.floor(scenario.nextWindow / 60)}m ${scenario.nextWindow % 60}s.`,
+      time: ageMs === null ? "Pending" : `${Math.floor(ageMs / 1000)}s ago`,
+    },
+    {
+      id: "fallback",
+      tone: "WARN",
+      title: "Fallback reminder",
+      message: "Voice confirmation is still required if the feed drifts stale.",
+      time: "Active",
+    },
+  ].filter(Boolean) as Array<{ id: string; tone: "HIGH" | "INFO" | "WARN"; title: string; message: string; time: string }>;
+
   return (
-    <AppShell>
-      <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">Traffic Control Dashboard</h1>
-            <p className="text-sm text-zinc-400">Junction windows + risk</p>
+    <AppShell
+      title="Traffic Control Dashboard"
+      eyebrow="Green Corridor Operations View"
+      liveState={surfaceLiveState}
+      locale={locale}
+      onLocaleChange={setLocale}
+    >
+      <div className="page-wrap">
+        <section className="glass-card section-card live-banner">
+          <div className="control-row">
+            <div className={liveStateClass(surfaceLiveState)}>{surfaceLiveState.toUpperCase()}</div>
+            <div className="meta-copy">
+              Last update: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : "Waiting"} • Source: {mode === "ws" ? "WebSocket" : "Polling"} • {tripId}
+            </div>
           </div>
-        </div>
+          <div className="meta-copy">Graceful fallback ready • Corridor timings still allow phone confirmation</div>
+        </section>
 
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 shadow-glow">
-            <div className="text-[11px] text-zinc-400">Trip ID</div>
-            <input
-              value={tripId}
-              onChange={(e) => setTripId(e.target.value)}
-              className="bg-transparent outline-none text-sm w-48 text-white placeholder:text-zinc-500"
-              placeholder="demo-trip"
-            />
-          </div>
-
-          <button
-            onClick={() => setOnlyHigh((v) => !v)}
-            className={[
-              "rounded-xl border px-3 py-2 text-xs font-semibold transition",
-              onlyHigh
-                ? "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-100"
-                : "border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10",
-            ].join(" ")}
-          >
-            {onlyHigh ? "Showing: HIGH only" : "Filter: HIGH only"}
-          </button>
-
-          <button
-            onClick={() => {
-              const text = filtered.length
-                ? filtered
-                    .map(
-                      (j) =>
-                        `${j.priority.toUpperCase()} | ${j.name} | ${new Date(j.window_start).toLocaleTimeString()}–${new Date(j.window_end).toLocaleTimeString()}`
-                    )
-                    .join("\n")
-                : "No corridor plan";
-              navigator.clipboard.writeText(text);
-            }}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-200 hover:bg-white/10 transition"
-          >
-            Copy Corridor
-          </button>
-
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <span>Auto refresh: 2.5s</span>
-            <span>Realtime:</span>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as RealtimeMode)}
-              className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-zinc-200"
-            >
+        <section className="glass-card section-card">
+          <div className="section-title">Demo Control Bar</div>
+          <div className="section-copy">Keep the dashboard live by default and layer presentation-safe scenarios on top.</div>
+          <div className="control-row" style={{ marginTop: 12 }}>
+            <input value={tripId} onChange={(event) => setTripId(event.target.value)} className="demo-input" placeholder="Enter trip ID" />
+            <button type="button" className="demo-btn demo-btn--primary" onClick={fetchPolling} disabled={loading}>
+              {loading ? "Loading..." : "Load Trip"}
+            </button>
+            <select value={pollingMs} onChange={(event) => setPollingMs(Number(event.target.value))} className="demo-select">
+              <option value={2000}>Poll 2s</option>
+              <option value={3000}>Poll 3s</option>
+              <option value={5000}>Poll 5s</option>
+              <option value={10000}>Poll 10s</option>
+            </select>
+            <select value={mode} onChange={(event) => setMode(event.target.value as RealtimeMode)} className="demo-select">
               <option value="polling">Polling</option>
               <option value="ws">WebSocket</option>
             </select>
-            {lastUpdated ? (
-              <span className="text-[11px] text-zinc-500">
-                Age: {Math.floor((Date.now() - lastUpdated) / 1000)}s
-              </span>
-            ) : null}
+            <button type="button" className={`demo-btn ${demoMode ? "demo-btn--primary" : ""}`} onClick={() => setDemoMode((value) => !value)}>
+              {demoMode ? "Demo Mode ON" : "Demo Mode OFF"}
+            </button>
+            <select value={variant} onChange={(event) => setVariant(event.target.value as DemoVariant)} className="demo-select">
+              <option value="normal">Normal</option>
+              <option value="delay">Simulate Delay</option>
+              <option value="near-arrival">Near Arrival</option>
+              <option value="reroute">Change Destination</option>
+            </select>
+            <button type="button" className={`demo-btn ${onlyHigh ? "demo-btn--primary" : ""}`} onClick={() => setOnlyHigh((value) => !value)}>
+              {onlyHigh ? "Showing HIGH only" : "Filter HIGH only"}
+            </button>
           </div>
+        </section>
+
+        <div className="grid-hero">
+          <section className="glass-card section-card">
+            <div className="hero-card__eyebrow">
+              <span className="hero-card__pulse" />
+              <span>Traffic Control View</span>
+            </div>
+            <div className="hero-card__main">
+              <div className="hero-card__trip">
+                <h2>{variant === "reroute" ? "District Headquarters Hospital" : "Government Medical College Hospital"}</h2>
+                <p>Ambulance Command Unit • {tripId} • ADVISORY CORRIDOR SUPPORT</p>
+              </div>
+              <div className="hero-card__eta">
+                <div className="metric-label">Next Window</div>
+                <div className="hero-card__eta-value">
+                  {Math.floor(scenario.nextWindow / 60)}m {scenario.nextWindow % 60}s
+                </div>
+                <div className="meta-copy">Approach node {scenario.nextJunction} • Delay allowance {scenario.delay}</div>
+              </div>
+            </div>
+            <div className="chip-row" style={{ marginTop: 18 }}>
+              <span className={riskChip(data?.delay_risk ?? "low")}>{(data?.delay_risk ?? "low").toUpperCase()} RISK</span>
+              <span className="status-chip status-chip--low">Distance {scenario.distance}</span>
+              <span className="status-chip status-chip--medium">Speed {scenario.speed}</span>
+              <span className="status-chip status-chip--low">Node {scenario.nextJunction}</span>
+            </div>
+          </section>
+
+          <section className="glass-card section-card">
+            <div className="section-title">Traffic Command Summary</div>
+            <div className="keyline-list" style={{ marginTop: 12 }}>
+              <div className="list-item">Next Junction: {scenario.nextJunction}</div>
+              <div className="list-item">Priority Window: {Math.floor(scenario.nextWindow / 60)}m {scenario.nextWindow % 60}s</div>
+              <div className="list-item">Traffic Risk: {(data?.delay_risk ?? "low").toUpperCase()}</div>
+              <div className="list-item">Operational Mode: Advisory corridor support</div>
+            </div>
+          </section>
         </div>
 
-        {err && <div className="p-3 rounded-lg bg-red-500/10 text-red-200 border border-red-500/30">{err}</div>}
+        <div className="metric-grid">
+          <section className="glass-card section-card">
+            <div className="metric-label">Next Window</div>
+            <div className="metric-value">{Math.floor(scenario.nextWindow / 60)}m {scenario.nextWindow % 60}s</div>
+            <div className="meta-copy">Approach node: {scenario.nextJunction}</div>
+          </section>
+          <section className="glass-card section-card">
+            <div className="metric-label">Route Delay</div>
+            <div className="metric-value">+{scenario.delay}</div>
+            <div className="meta-copy">Recommended timing allowance above baseline</div>
+          </section>
+          <section className="glass-card section-card">
+            <div className="metric-label">Vehicle Speed</div>
+            <div className="metric-value">{scenario.speed}</div>
+            <div className="meta-copy">Latest corridor speed snapshot</div>
+          </section>
+          <section className="glass-card section-card">
+            <div className="metric-label">Route Remaining</div>
+            <div className="metric-value">{scenario.distance}</div>
+            <div className="meta-copy">Distance left to destination hospital</div>
+          </section>
+        </div>
 
-        {next && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-glow">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm text-zinc-400">Next Junction Window</div>
-                <div className="mt-2 text-xl font-semibold">{next.name}</div>
-                <div className="mt-1 text-sm text-zinc-400">
-                  {new Date(next.window_start).toLocaleTimeString()} – {new Date(next.window_end).toLocaleTimeString()}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-zinc-400">Starts in</div>
-                <div className="text-2xl font-bold">
-                  {nextInSec !== null ? `${Math.floor(nextInSec / 60)}m ${nextInSec % 60}s` : "—"}
-                </div>
-                <div
-                  className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${pill(next.priority)}`}
-                >
-                  {next.priority.toUpperCase()}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="content-grid">
+          <section className="glass-card section-card">
+            <div className="section-title">Route & Live Position</div>
+            <div className="section-copy">Styled placeholder panel. Replace this with the live Leaflet route layer when geometry wiring is ready.</div>
+            <div className="map-placeholder" style={{ marginTop: 16 }} />
+          </section>
 
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-glow">
-          <div className="text-sm text-zinc-400 mb-3">Critical Junctions (sorted by window)</div>
-
-          {!filtered.length && (
-            <div className="text-zinc-400">
-              No corridor plan received yet. Possible reasons:
-              <ul className="list-disc ml-5 mt-2 text-zinc-500">
-                <li>Corridor planner service not wired to DB yet</li>
-                <li>Trip has no route geometry</li>
-                <li>Prediction exists but planner output not saved</li>
-              </ul>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {filtered.map((j, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between border border-white/10 rounded-lg p-3 bg-white/5"
-              >
-                <div>
-                  <div className="font-medium">{j.name}</div>
-                  <div className="text-xs text-zinc-500">
-                    Window: {new Date(j.window_start).toLocaleTimeString()} – {new Date(j.window_end).toLocaleTimeString()}
+          <div className="side-stack">
+            <section className="glass-card section-card">
+              <div className="section-title">Corridor Timeline</div>
+              <div className="timeline-list" style={{ marginTop: 12 }}>
+                {filtered.length ? (
+                  filtered.map((junction, index) => (
+                    <div key={`${junction.name}-${index}`} className="list-item">
+                      <strong>{junction.name}</strong> • {new Date(junction.window_start).toLocaleTimeString()} - {new Date(junction.window_end).toLocaleTimeString()}
+                      <div className="item-copy">
+                        {junction.priority === "high"
+                          ? "Manual clearing recommended for this junction window."
+                          : "Maintain advisory corridor support and monitor flow."}
+                      </div>
+                      <div className="meta-copy">{junction.priority.toUpperCase()}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="list-item">
+                    <strong>No corridor plan received yet.</strong>
+                    <div className="item-copy">Planner output is not available from the backend for this trip.</div>
                   </div>
-                </div>
-                <span className={`px-3 py-1 rounded ${pill(j.priority)}`}>{j.priority.toUpperCase()}</span>
+                )}
               </div>
-            ))}
+            </section>
+
+            <section className="glass-card section-card">
+              <div className="section-title">Operational Alert Feed</div>
+              <div className="feed-list" style={{ marginTop: 12 }}>
+                {alerts.map((alert) => (
+                  <div key={alert.id} className="list-item">
+                    <strong>{alert.tone}</strong> • {alert.title}
+                    <div className="item-copy">{alert.message}</div>
+                    <div className="meta-copy">{alert.time}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       </div>

@@ -1,6 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.db import get_db
+from app.models import GPSPoint, Trip, TripStatus
 from app.schemas.dashboard import HospitalDashboardResponse, TrafficDashboardResponse
+from app.services.corridor_service import build_corridor_windows_for_trip
 from app.services.dashboard_service import build_hospital_dashboard, build_traffic_dashboard
+from app.services.eta_service import compute_trip_eta
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -89,3 +95,40 @@ def traffic_dashboard(trip_id: str):
         pass
 
     return payload
+
+
+@router.get("/summary")
+def dashboard_summary(
+    hospital_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    query = db.query(Trip).filter(Trip.status.in_([TripStatus.EN_ROUTE, TripStatus.NEAR_ARRIVAL, TripStatus.ARRIVED]))
+    if hospital_id:
+        query = query.filter(Trip.destination_hospital_id == hospital_id)
+
+    trips = query.order_by(Trip.updated_at.desc()).all()
+    items = []
+    for trip in trips:
+        latest = (
+            db.query(GPSPoint)
+            .filter(GPSPoint.trip_id == trip.trip_id)
+            .order_by(GPSPoint.recorded_at.desc())
+            .first()
+        )
+        speed_kmph = float(latest.speed_mps * 3.6) if latest and latest.speed_mps is not None else None
+        eta = compute_trip_eta(trip, speed_kmph=speed_kmph)
+        corridor = build_corridor_windows_for_trip(trip, eta.eta_final_seconds)
+        items.append(
+            {
+                "trip_id": trip.trip_id,
+                "status": trip.status.value,
+                "destination_hospital_id": trip.destination_hospital_id,
+                "eta_final_seconds": eta.eta_final_seconds,
+                "predicted_delay_seconds": eta.predicted_delay_seconds,
+                "risk_level": eta.risk_level,
+                "last_update_at": trip.updated_at,
+                "corridor_windows": [window.model_dump(mode="json") for window in corridor],
+            }
+        )
+
+    return {"items": items, "count": len(items)}

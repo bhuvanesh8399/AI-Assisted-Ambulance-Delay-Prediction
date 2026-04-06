@@ -2,6 +2,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
   ApiConfig(this._prefs);
+  static Future<ApiConfig> create() async {
+    final prefs = await SharedPreferences.getInstance();
+    return ApiConfig(prefs);
+  }
 
   final SharedPreferences _prefs;
 

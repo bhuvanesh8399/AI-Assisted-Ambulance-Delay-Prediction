@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config/api_config.dart';
 import '../core/network/api_client.dart';
@@ -29,7 +26,7 @@ class _AmbulanceAppState extends State<AmbulanceApp> {
   void initState() {
     super.initState();
     _config = ApiConfig(widget.prefs);
-    _apiClient = ApiClient(_config);
+    _apiClient = ApiClient(baseUrl: _config.getBaseUrl());
 
     final saved = _config.getLanguageCode();
     if (saved != null && saved.isNotEmpty) {

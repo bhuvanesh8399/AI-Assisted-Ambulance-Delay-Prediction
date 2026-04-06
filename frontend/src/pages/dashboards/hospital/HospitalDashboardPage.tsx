@@ -1,46 +1,59 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "../../../components/layout/AppShell";
-import LivePill from "../../../components/ui/LivePill";
-import { useEmaHistory } from "../../../hooks/useEmaHistory";
-import { formatCountdown } from "../../../utils/time";
+import { useFrontendLocale } from "../../../hooks/useFrontendLocale";
+import { useLiveStatus } from "../../../hooks/useLiveStatus";
 import { fetchHospitalDashboard } from "../../../services/dashboard/dashboardService";
 import type { HospitalDashboardResponse } from "../../../services/dashboard/types";
 import { connectTripWS } from "../../../services/realtime";
 import type { RealtimeMode } from "../../../services/realtime";
+import { formatCountdown } from "../../../utils/time";
 
-const riskStyle = (risk: string) => {
-  if (risk === "high") return "bg-red-500/15 text-red-200 border-red-500/30";
-  if (risk === "medium") return "bg-yellow-500/15 text-yellow-100 border-yellow-500/30";
-  return "bg-emerald-500/15 text-emerald-100 border-emerald-500/30";
-};
+type DemoVariant = "normal" | "delay" | "near-arrival" | "reroute";
+
+function statusChipClass(risk: string) {
+  if (risk === "high") return "status-chip status-chip--high";
+  if (risk === "medium") return "status-chip status-chip--medium";
+  return "status-chip status-chip--low";
+}
+
+function liveStateClass(liveState: "live" | "stale" | "offline") {
+  if (liveState === "live") return "live-banner__status live-banner__status--live";
+  if (liveState === "stale") return "live-banner__status live-banner__status--stale";
+  return "live-banner__status live-banner__status--offline";
+}
 
 export default function HospitalDashboardPage() {
   const [tripId, setTripId] = useState("demo-trip");
   const [data, setData] = useState<HospitalDashboardResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [mode, setMode] = useState<RealtimeMode>("polling");
+  const [pollingMs, setPollingMs] = useState(3000);
   const [lastUpdated, setLastUpdated] = useState<number>(0);
-
-  const etaHistory = useEmaHistory(data?.eta_final_sec ?? null, 8);
+  const [loading, setLoading] = useState(false);
+  const [demoMode, setDemoMode] = useState(true);
+  const [variant, setVariant] = useState<DemoVariant>("normal");
+  const { locale, setLocale } = useFrontendLocale("en");
 
   const fetchPolling = async () => {
     try {
+      setLoading(true);
       setErr(null);
       const res = await fetchHospitalDashboard(tripId);
       setData(res);
       setLastUpdated(Date.now());
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load");
+    } catch (error: any) {
+      setErr(error?.message || "Failed to load");
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!tripId || mode !== "polling") return;
     fetchPolling();
-    const t = window.setInterval(fetchPolling, 2500);
-    return () => window.clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripId, mode]);
+    const timer = window.setInterval(fetchPolling, pollingMs);
+    return () => window.clearInterval(timer);
+  }, [tripId, mode, pollingMs]);
 
   useEffect(() => {
     if (!tripId || mode !== "ws") return;
@@ -57,155 +70,252 @@ export default function HospitalDashboardPage() {
     return cleanup;
   }, [tripId, mode]);
 
-  const spike =
-    etaHistory.length >= 2 &&
-    etaHistory[etaHistory.length - 1] - etaHistory[etaHistory.length - 2] >= 120;
+  const { liveState, ageMs } = useLiveStatus({
+    lastUpdatedAt: data?.last_updated ?? (lastUpdated || null),
+    staleAfterMs: pollingMs * 2,
+    offlineAfterMs: pollingMs * 6,
+  });
 
+  const surfaceLiveState = liveState === "LIVE" ? "live" : liveState === "STALE" ? "stale" : "offline";
   const countdown = data?.countdown_sec ?? 0;
-  const status = countdown <= 0 ? "ARRIVED" : countdown <= 120 ? "NEAR ARRIVAL" : "EN ROUTE";
+  const baselineMinutes = Math.max(1, Math.round((data?.eta_baseline_sec ?? data?.eta_final_sec ?? 60) / 60));
+  const delayMinutes = Math.max(0, Math.round((data?.delay_pred_sec ?? 0) / 60));
 
-  const startSec = data?.eta_baseline_sec ?? data?.eta_final_sec ?? 1;
-  const pct = startSec > 0 ? Math.min(100, Math.max(0, (1 - countdown / startSec) * 100)) : 0;
+  const scenario = useMemo(() => {
+    const destinationHospital = variant === "reroute" ? "District Headquarters Hospital" : "Government Medical College Hospital";
+    if (!demoMode) {
+      return {
+        destinationHospital,
+        status: countdown <= 0 ? "ARRIVED" : countdown <= 120 ? "NEAR ARRIVAL" : "EN ROUTE",
+        finalCountdown: countdown,
+        finalDelayMinutes: delayMinutes,
+      };
+    }
+
+    if (variant === "delay") {
+      return {
+        destinationHospital,
+        status: "EN ROUTE",
+        finalCountdown: countdown + 180,
+        finalDelayMinutes: Math.max(delayMinutes, 5),
+      };
+    }
+
+    if (variant === "near-arrival") {
+      return {
+        destinationHospital,
+        status: "NEAR ARRIVAL",
+        finalCountdown: Math.min(countdown || 180, 180),
+        finalDelayMinutes: 0,
+      };
+    }
+
+    if (variant === "reroute") {
+      return {
+        destinationHospital,
+        status: "EN ROUTE",
+        finalCountdown: countdown + 120,
+        finalDelayMinutes: Math.max(delayMinutes, 3),
+      };
+    }
+
+    return {
+      destinationHospital,
+      status: countdown <= 0 ? "ARRIVED" : countdown <= 120 ? "NEAR ARRIVAL" : "EN ROUTE",
+      finalCountdown: countdown,
+      finalDelayMinutes: delayMinutes,
+    };
+  }, [baselineMinutes, countdown, delayMinutes, demoMode, variant]);
+
+  const alerts = [
+    err
+      ? { id: "error", tone: "HIGH", title: "Dashboard error", message: err, time: "Now" }
+      : null,
+    {
+      id: "prep",
+      tone: (data?.delay_risk ?? "low") === "high" ? "HIGH" : "INFO",
+      title: "Prep guidance",
+      message: data?.prep_suggestion ?? "Normal prep: monitor ETA",
+      time: ageMs === null ? "Pending" : `${Math.floor(ageMs / 1000)}s ago`,
+    },
+    {
+      id: "fallback",
+      tone: "WARN",
+      title: "Fallback readiness",
+      message: "Phone coordination remains the backup when the feed turns stale.",
+      time: "Active",
+    },
+  ].filter(Boolean) as Array<{ id: string; tone: "HIGH" | "INFO" | "WARN"; title: string; message: string; time: string }>;
+
+  const corridor = [
+    {
+      id: "j1",
+      junction: variant === "reroute" ? "Court Road Split" : "Collector Office Junction",
+      etaWindow: `${Math.max(1, Math.floor(scenario.finalCountdown / 60))}m`,
+      note: "Prepare downstream receiving sequence against this approach window.",
+      priority: data?.delay_risk ?? "low",
+    },
+    {
+      id: "j2",
+      junction: "Hospital Entry Gate",
+      etaWindow: `${Math.max(1, Math.floor(scenario.finalCountdown / 60) + 2)}m`,
+      note: "Keep handover lane and emergency bay clear for transfer.",
+      priority: scenario.status === "NEAR ARRIVAL" ? "high" : "medium",
+    },
+  ];
 
   return (
-    <AppShell>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Hospital Dashboard</h1>
-          <p className="text-zinc-400 mt-1">
-            Live ETA, delay risk, and readiness guidance (auto refresh)
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-zinc-400">Status</span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold">
-              {status}
-            </span>
-            {spike && (
-              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-100">
-                Delay spike detected
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <LivePill lastUpdated={data?.last_updated} />
-
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 shadow-glow">
-            <div className="text-[11px] text-zinc-400">Trip ID</div>
-            <input
-              value={tripId}
-              onChange={(e) => setTripId(e.target.value)}
-              className="bg-transparent outline-none text-sm w-56 text-white placeholder:text-zinc-500"
-              placeholder="demo-trip"
-            />
-          </div>
-
-          <button
-            onClick={() => navigator.clipboard.writeText(tripId)}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-200 hover:bg-white/10 transition"
-          >
-            Copy Trip
-          </button>
-
-          <button
-            onClick={() => {
-              const msg = `Ambulance ETA: ${data?.eta_final_sec ?? "-"}s | Risk: ${(
-                data?.delay_risk ?? "low"
-              ).toUpperCase()}`;
-              navigator.clipboard.writeText(msg);
-            }}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-zinc-200 hover:bg-white/10 transition"
-          >
-            Copy ETA Msg
-          </button>
-
-          <div className="text-xs text-zinc-400">Realtime:</div>
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as RealtimeMode)}
-            className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-zinc-200"
-          >
-            <option value="polling">Polling</option>
-            <option value="ws">WebSocket</option>
-          </select>
-        </div>
-      </div>
-
-      {err && (
-        <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-100">
-          <div className="font-semibold">Dashboard error</div>
-          <div className="text-sm mt-1 opacity-90">{err}</div>
-        </div>
-      )}
-
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Countdown */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-glow">
-          <div className="text-sm text-zinc-400">Arrival Countdown</div>
-          <div className="mt-3 text-4xl font-extrabold tracking-tight">
-            {formatCountdown(data?.countdown_sec ?? 0)}
-          </div>
-          <div className="mt-2 text-xs text-zinc-400">
-            Last update: {data?.last_updated ? new Date(data.last_updated).toLocaleTimeString() : "-"}{" "}
-            {lastUpdated ? `(age ${Math.floor((Date.now() - lastUpdated) / 1000)}s)` : ""}
-          </div>
-          <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-            <div className="h-full bg-cyan-400/80" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="mt-3 text-xs text-zinc-400">
-            ETA trend:{" "}
-            <span className="text-zinc-200">
-              {etaHistory.length
-                ? etaHistory.map((v) => Math.round(v / 60)).join(" -> ") + " (min)"
-                : "-"}
-            </span>
-          </div>
-        </div>
-
-        {/* Risk */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-glow">
-          <div className="text-sm text-zinc-400">Delay Risk</div>
-          <div className="mt-3">
-            <span
-              className={[
-                "inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold",
-                riskStyle(data?.delay_risk || "low"),
-              ].join(" ")}
-            >
-              {(data?.delay_risk || "low").toUpperCase()}
-            </span>
-          </div>
-          <div className="mt-3 text-xs text-zinc-400">
-            Risk is computed from ML delay / route conditions.
-          </div>
-        </div>
-
-        {/* ETA */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-glow">
-          <div className="text-sm text-zinc-400">Final ETA</div>
-          <div className="mt-3 text-3xl font-bold">{data?.eta_final_sec ?? 0}s</div>
-          <div className="mt-3 text-xs text-zinc-400">
-            Baseline: <span className="text-zinc-200">{data?.eta_baseline_sec ?? "-"}</span>{" "}
-            | Pred delay: <span className="text-zinc-200">{data?.delay_pred_sec ?? "-"}</span>
-          </div>
-          {spike && <div className="mt-2 text-xs text-amber-200">Delay spike detected</div>}
-        </div>
-      </div>
-
-      {/* Suggestion */}
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5 shadow-glow">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-sm text-zinc-400">Prep Suggestion</div>
-            <div className="mt-2 text-lg font-semibold">{data?.prep_suggestion || "-"}</div>
-            <div className="mt-1 text-sm text-zinc-400">
-              This is rule-based guidance for safe hospital readiness.
+    <AppShell
+      title="Hospital Dashboard"
+      eyebrow="Destination-Aware Emergency Monitoring"
+      liveState={surfaceLiveState}
+      locale={locale}
+      onLocaleChange={setLocale}
+    >
+      <div className="page-wrap">
+        <section className="glass-card section-card live-banner">
+          <div className="control-row">
+            <div className={liveStateClass(surfaceLiveState)}>{surfaceLiveState.toUpperCase()}</div>
+            <div className="meta-copy">
+              Last update: {data?.last_updated ? new Date(data.last_updated).toLocaleTimeString() : "Waiting"} •
+              Source: {mode === "ws" ? "WebSocket" : "Polling"} • {tripId}
             </div>
           </div>
+          <div className="meta-copy">Graceful fallback ready • Phone coordination remains backup</div>
+        </section>
 
-          <div className="rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-2 text-xs text-zinc-400">
-            Mode: <span className="text-zinc-200">Live</span>
+        <section className="glass-card section-card">
+          <div className="section-title">Demo Control Bar</div>
+          <div className="section-copy">Use live backend data by default and toggle UI-only scenarios when presenting.</div>
+          <div className="control-row" style={{ marginTop: 12 }}>
+            <input value={tripId} onChange={(event) => setTripId(event.target.value)} className="demo-input" placeholder="Enter trip ID" />
+            <button type="button" className="demo-btn demo-btn--primary" onClick={fetchPolling} disabled={loading}>
+              {loading ? "Loading..." : "Load Trip"}
+            </button>
+            <select value={pollingMs} onChange={(event) => setPollingMs(Number(event.target.value))} className="demo-select">
+              <option value={2000}>Poll 2s</option>
+              <option value={3000}>Poll 3s</option>
+              <option value={5000}>Poll 5s</option>
+              <option value={10000}>Poll 10s</option>
+            </select>
+            <select value={mode} onChange={(event) => setMode(event.target.value as RealtimeMode)} className="demo-select">
+              <option value="polling">Polling</option>
+              <option value="ws">WebSocket</option>
+            </select>
+            <button type="button" className={`demo-btn ${demoMode ? "demo-btn--primary" : ""}`} onClick={() => setDemoMode((value) => !value)}>
+              {demoMode ? "Demo Mode ON" : "Demo Mode OFF"}
+            </button>
+            <select value={variant} onChange={(event) => setVariant(event.target.value as DemoVariant)} className="demo-select">
+              <option value="normal">Normal</option>
+              <option value="delay">Simulate Delay</option>
+              <option value="near-arrival">Near Arrival</option>
+              <option value="reroute">Change Destination</option>
+            </select>
+          </div>
+        </section>
+
+        <div className="grid-hero">
+          <section className="glass-card section-card">
+            <div className="hero-card__eyebrow">
+              <span className="hero-card__pulse" />
+              <span>Hospital Operations View</span>
+            </div>
+            <div className="hero-card__main">
+              <div className="hero-card__trip">
+                <h2>{scenario.destinationHospital}</h2>
+                <p>Ambulance Command Unit • {tripId} • {scenario.status}</p>
+              </div>
+              <div className="hero-card__eta">
+                <div className="metric-label">Final ETA</div>
+                <div className="hero-card__eta-value">{formatCountdown(scenario.finalCountdown)}</div>
+                <div className="meta-copy">Baseline {baselineMinutes}m + AI delay {scenario.finalDelayMinutes}m</div>
+              </div>
+            </div>
+            <div className="chip-row" style={{ marginTop: 18 }}>
+              <span className={statusChipClass(data?.delay_risk ?? "low")}>{(data?.delay_risk ?? "low").toUpperCase()} RISK</span>
+              <span className="status-chip status-chip--low">Distance {variant === "near-arrival" ? "1.1 km" : "6.8 km"}</span>
+              <span className="status-chip status-chip--medium">Speed {variant === "delay" ? "28 km/h" : "42 km/h"}</span>
+              <span className="status-chip status-chip--low">Next Window {Math.max(1, Math.floor(scenario.finalCountdown / 60))}m</span>
+            </div>
+          </section>
+
+          <div className="side-stack">
+            <section className="glass-card section-card">
+              <div className="section-title">Hospital Readiness</div>
+              <div className="keyline-list" style={{ marginTop: 12 }}>
+                <div className="list-item">Destination Hospital: {scenario.destinationHospital}</div>
+                <div className="list-item">Ambulance Status: {scenario.status}</div>
+                <div className="list-item">Acknowledgement State: {variant === "near-arrival" ? "PREPARING" : "ACKNOWLEDGED"}</div>
+                <div className="list-item">Recommended Prep Mode: {scenario.status === "NEAR ARRIVAL" ? "Active handover readiness" : "Desk preparation"}</div>
+              </div>
+            </section>
+            <section className="glass-card section-card">
+              <div className="section-title">AI Delay Explanation</div>
+              <div className="keyline-list" style={{ marginTop: 12 }}>
+                <div className="list-item">Peak congestion pressure is raising the predicted delay above route baseline.</div>
+                <div className="list-item">Upcoming junction density increases corridor sensitivity for coordinated clearing.</div>
+                <div className="list-item">The ETA model is flagging elevated operational risk on the current approach.</div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div className="metric-grid">
+          <section className="glass-card section-card">
+            <div className="metric-label">Final ETA</div>
+            <div className="metric-value">{formatCountdown(scenario.finalCountdown)}</div>
+            <div className="meta-copy">AI-adjusted arrival • {Math.max(1, Math.round(scenario.finalCountdown / 60))} min remaining</div>
+          </section>
+          <section className="glass-card section-card">
+            <div className="metric-label">Baseline ETA</div>
+            <div className="metric-value">{baselineMinutes}m</div>
+            <div className="meta-copy">OSRM route estimate before delay correction</div>
+          </section>
+          <section className="glass-card section-card">
+            <div className="metric-label">Predicted Delay</div>
+            <div className="metric-value">+{scenario.finalDelayMinutes}m</div>
+            <div className="meta-copy">AI-added delay from traffic and route pressure</div>
+          </section>
+          <section className="glass-card section-card">
+            <div className="metric-label">Readiness</div>
+            <div className="metric-value">{variant === "near-arrival" ? "ACTIVE" : "MONITOR"}</div>
+            <div className="meta-copy">{data?.prep_suggestion ?? "Normal prep: monitor ETA"}</div>
+          </section>
+        </div>
+
+        <div className="content-grid">
+          <section className="glass-card section-card">
+            <div className="section-title">Route & Live Position</div>
+            <div className="section-copy">Styled placeholder panel. Replace this with the live Leaflet route layer when geometry wiring is ready.</div>
+            <div className="map-placeholder" style={{ marginTop: 16 }} />
+          </section>
+
+          <div className="side-stack">
+            <section className="glass-card section-card">
+              <div className="section-title">Operational Alert Feed</div>
+              <div className="feed-list" style={{ marginTop: 12 }}>
+                {alerts.map((alert) => (
+                  <div key={alert.id} className="list-item">
+                    <strong>{alert.tone}</strong> • {alert.title}
+                    <div className="item-copy">{alert.message}</div>
+                    <div className="meta-copy">{alert.time}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="glass-card section-card">
+              <div className="section-title">Corridor Timeline</div>
+              <div className="timeline-list" style={{ marginTop: 12 }}>
+                {corridor.map((item) => (
+                  <div key={item.id} className="list-item">
+                    <strong>{item.junction}</strong> • {item.etaWindow}
+                    <div className="item-copy">{item.note}</div>
+                    <div className="meta-copy">{item.priority.toUpperCase()}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       </div>

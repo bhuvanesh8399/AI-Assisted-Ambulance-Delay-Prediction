@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ambulance_app/core/i18n/app_localizations.dart';
 
 import '../../core/config/api_config.dart';
-import '../../core/widgets/primary_button.dart';
+import '../../core/utils/ui_utils.dart';
 import '../settings/language_sheet.dart';
 
 class SetupPage extends StatefulWidget {
@@ -21,15 +21,15 @@ class SetupPage extends StatefulWidget {
 }
 
 class _SetupPageState extends State<SetupPage> {
-  late final TextEditingController _ambulanceId;
-  late final TextEditingController _baseUrl;
+  final TextEditingController _ambulanceId = TextEditingController();
+  final TextEditingController _baseUrl = TextEditingController();
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _ambulanceId = TextEditingController(text: widget.config.getAmbulanceId());
-    _baseUrl = TextEditingController(text: widget.config.getBaseUrl());
+    _ambulanceId.text = widget.config.getAmbulanceId();
+    _baseUrl.text = widget.config.getBaseUrl();
   }
 
   @override
@@ -40,13 +40,12 @@ class _SetupPageState extends State<SetupPage> {
   }
 
   Future<void> _save() async {
+    final t = AppLocalizations.of(context);
     final id = _ambulanceId.text.trim();
     final url = _baseUrl.text.trim();
 
     if (id.isEmpty || url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.fillAllFields)),
-      );
+      showSnack(context, t?.fillAllFields ?? 'Please fill all fields');
       return;
     }
 
@@ -69,16 +68,16 @@ class _SetupPageState extends State<SetupPage> {
 
   @override
   Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context)!;
+    final t = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(t.setupTitle),
+        title: Text(t?.setupTitle ?? 'Setup'),
         actions: [
           IconButton(
             onPressed: _openLanguage,
             icon: const Icon(Icons.translate),
-            tooltip: t.language,
+            tooltip: t?.language ?? 'Language',
           ),
         ],
       ),
@@ -91,7 +90,7 @@ class _SetupPageState extends State<SetupPage> {
               child: Column(
                 children: [
                   Text(
-                    t.setupHint,
+                    t?.setupHint ?? 'Enter ambulance ID and backend URL.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 16),
@@ -99,7 +98,7 @@ class _SetupPageState extends State<SetupPage> {
                     controller: _ambulanceId,
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
-                      labelText: t.ambulanceId,
+                      labelText: t?.ambulanceId ?? 'Ambulance ID',
                       prefixIcon: const Icon(Icons.badge_rounded),
                     ),
                   ),
@@ -108,9 +107,9 @@ class _SetupPageState extends State<SetupPage> {
                     controller: _baseUrl,
                     keyboardType: TextInputType.url,
                     decoration: InputDecoration(
-                      labelText: t.backendBaseUrl,
+                      labelText: t?.backendBaseUrl ?? 'Backend Base URL',
                       prefixIcon: const Icon(Icons.cloud_rounded),
-                      helperText: t.backendHint,
+                      helperText: t?.backendHint ?? 'Example: http://127.0.0.1:8000',
                     ),
                   ),
                 ],
@@ -118,10 +117,14 @@ class _SetupPageState extends State<SetupPage> {
             ),
           ),
           const SizedBox(height: 10),
-          PrimaryButton(
-            label: _saving ? t.saving : t.saveAndContinue,
-            icon: Icons.save_rounded,
-            onPressed: _saving ? null : _save,
+          SizedBox(
+            height: 56,
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: const Icon(Icons.save_rounded),
+              label: Text(_saving ? (t?.saving ?? 'Saving...') : (t?.saveAndContinue ?? 'Save & Continue')),
+            ),
           ),
         ],
       ),

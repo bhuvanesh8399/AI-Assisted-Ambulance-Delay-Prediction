@@ -75,6 +75,32 @@ def arrive_trip(trip_id: str, db: Session = Depends(get_db)):
     return TripArriveOut(trip_id=trip.trip_id, status=trip.status.value, arrived_at=trip.arrived_at)
 
 
+@router.post("/{trip_id}/near-arrival")
+def mark_near_arrival(trip_id: str, db: Session = Depends(get_db)):
+    trip = db.query(Trip).filter(Trip.trip_id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="trip_not_found")
+
+    trip.status = TripStatus.NEAR_ARRIVAL
+    trip.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"ok": True, "trip_id": trip.trip_id, "status": trip.status.value}
+
+
+@router.post("/{trip_id}/stop")
+def stop_trip(trip_id: str, db: Session = Depends(get_db)):
+    trip = db.query(Trip).filter(Trip.trip_id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="trip_not_found")
+
+    trip.status = TripStatus.STOPPED
+    trip.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"ok": True, "trip_id": trip.trip_id, "status": trip.status.value}
+
+
 # OPTIONAL ACK LOOP
 @router.post("/{trip_id}/ack", response_model=AckOut)
 def ack_trip(trip_id: str, payload: AckIn, db: Session = Depends(get_db)):
