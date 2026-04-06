@@ -71,7 +71,7 @@ class _AmbulanceAppState extends State<AmbulanceApp> {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'Ambulance Driver',
-      theme: ThemeData.dark().copyWith(useMaterial3: true),
+      theme: ThemeData.dark().copyWith(),
 
       routerConfig: _router,
 
