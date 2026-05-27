@@ -1,217 +1,91 @@
-﻿# AI-Assisted-Ambulance-Delay-Prediction & Dynamic Green Corridor Planning
-## 🚀 Featured Projects
+# AI-Assisted Ambulance Delay Prediction 🚑
 
-### 1. AI-Assisted Ambulance Delay Prediction
-Real-time ambulance delay prediction system using GPS, routing, and ML-based delay estimation.
+AI-Assisted Ambulance Delay Prediction is a real-world AI-based project that predicts ambulance delay using location, route, traffic-related factors, and machine learning-based estimation.
 
-**Tech Stack:** Python, FastAPI, Machine Learning, OSRM, Dashboard
+The goal of this project is to support emergency response planning by estimating possible ambulance delays and helping improve decision-making during medical emergencies.
 
-🔗 GitHub: https://github.com/bhuvanesh8399/AI-Assisted-Ambulance-Delay-Prediction  
-🌐 Live Demo: Not deployed yet
+## 📌 About the Project
 
----
+Ambulance delay can affect emergency healthcare response.  
+This project focuses on predicting delay time using route and travel-related data.
 
-### 2. Chat App
-Full-stack real-time chat application with authentication, chat rooms, messaging, and WebSocket support.
+It combines backend APIs, location-based processing, machine learning prediction, and dashboard-based monitoring to create a practical emergency support system.
 
-**Tech Stack:** React, Java, Spring Boot, WebSocket, JWT, Database
+## 🚀 Features
 
-🔗 GitHub: https://github.com/bhuvanesh8399/Chat-App  
-🌐 Live Demo: Not deployed yet
+- Ambulance delay prediction
+- Location/GPS-based input support
+- Route-based analysis
+- Machine learning model for delay estimation
+- Backend API integration
+- Dashboard for viewing prediction results
+- Real-world emergency response use case
+- Simple and practical user flow
 
----
+## 🛠️ Tech Stack
 
-### 3. Aqua Portfolio
-Personal portfolio website with creative ocean theme, animations, project showcase, resume, and contact section.
+### Backend
+- Python
+- FastAPI
 
-**Tech Stack:** React, Vite, Tailwind CSS, Vercel
+### Machine Learning
+- Scikit-learn
+- Pandas
+- NumPy
 
-🔗 GitHub: https://github.com/bhuvanesh8399/Aqua-portfolio  
-🌐 Live Demo: https://aqua-portfolio-rho.vercel.app/
+### Routing / Location
+- OSRM / Route-based processing
+- GPS/location data handling
 
-An open-source, end-to-end decision-support system that predicts ambulance delays in real time and generates a dynamic green corridor plan to help hospitals and traffic authorities reduce emergency response time.
+### Frontend / Dashboard
+- HTML
+- CSS
+- JavaScript
+- Dashboard UI
 
-📌 Project Overview
+### Tools
+- Git
+- GitHub
+- VS Code
+- Postman
 
-Emergency response delays cost lives. This project addresses that gap by combining live GPS streaming, open-source routing, and lightweight machine learning to estimate ambulance arrival times and proactively prepare traffic corridors and hospital teams.
+## 📂 Main Modules
 
-The system is fully software-based, built entirely on free and open-source technologies, and designed for real-world scalability without relying on paid APIs or proprietary traffic systems.
+- Data input module
+- Route analysis module
+- Delay prediction model
+- Backend API module
+- Dashboard/result display module
 
-🎯 Key Objectives
+## 🎯 Purpose
 
-Stream live ambulance GPS data at high frequency (2–5 seconds)
+This project is useful for showing my skills in:
 
-Compute baseline ETA using OpenStreetMap + OSRM
+- AI/ML-based problem solving
+- Python backend development
+- Real-world project thinking
+- API creation using FastAPI
+- Machine learning model integration
+- Emergency healthcare technology use case
 
-Predict additional delays using ML models on tabular data
+## 📚 What I Learned
 
-Generate a dynamic green corridor plan (junctions + time windows)
+Through this project, I learned:
 
-Provide real-time dashboards for:
+- How to apply machine learning to real-world problems
+- How backend APIs can connect with ML models
+- How route and location data can support prediction
+- How to structure an AI-based software project
+- How to present technical results through a dashboard
+- How AI can be used in emergency response systems
 
-Traffic authorities (route + corridor view)
+## 🔗 Important Links
 
-Hospitals (ETA + preparation alerts)
+GitHub: https://github.com/bhuvanesh8399/AI-Assisted-Ambulance-Delay-Prediction  
+Live Demo: Not deployed yet
 
-🧠 System Architecture (High Level)
-Ambulance GPS Client
-        ↓
- FastAPI Backend
-        ↓
- Trip & GPS Store (DB)
-        ↓
- OSRM Routing Engine
-        ↓
- ML Delay Prediction
-        ↓
- Final ETA + Risk Level
-        ↓
- Green Corridor Planner
-        ↓
- Traffic & Hospital Dashboards
+## 👨‍💻 Author
 
-✅ Section 1 Status — Trip Lifecycle & GPS Streaming (COMPLETED)
-What We Have Implemented
-
-Section 1 establishes the foundation of the entire system by handling trip creation and high-frequency GPS ingestion in a reliable and scalable manner.
-
-Capabilities delivered:
-
-Start and stop ambulance trips with unique trip_id
-
-Stream GPS updates every 2–5 seconds
-
-Validate and store GPS points with timestamps
-
-Reject GPS updates for invalid or stopped trips
-
-Retrieve the latest GPS point for downstream modules (routing, ETA, corridor)
-
-Fully open-source backend using FastAPI + SQLAlchemy
-
-Database-ready for SQLite (development) and PostgreSQL (production)
-
-Performance Guarantee
-
-Each GPS update is processed in O(1) time
-
-Total processing time is O(n) for n GPS updates
-
-Database indexes ensure fast retrieval and scalability
-
-🔌 API Overview (Stable Contract)
-Trip Lifecycle
-
-Start Trip
-
-POST /api/trip/start
-
-
-Request:
-
-{
-  "ambulance_id": "AMB-001",
-  "hospital_id": "HOSP-07",
-  "start_lat": 12.9716,
-  "start_lon": 77.5946
-}
-
-
-Response:
-
-{
-  "trip_id": "uuid",
-  "started_at": "timestamp"
-}
-
-
-Stop Trip
-
-POST /api/trip/stop
-
-GPS Streaming
-
-Update GPS
-
-POST /api/gps/update
-
-
-Request:
-
-{
-  "trip_id": "uuid",
-  "lat": 12.9720,
-  "lon": 77.5950,
-  "timestamp": "ISO-8601"
-}
-
-
-Response:
-
-{ "ok": true }
-
-Helper Endpoint (for Routing & ETA)
-GET /api/trip/latest_gps?trip_id=
-
-🧩 Technology Stack
-Backend
-
-FastAPI (Python)
-
-SQLAlchemy ORM
-
-SQLite (dev) / PostgreSQL (prod)
-
-Uvicorn ASGI server
-
-Routing
-
-OpenStreetMap
-
-OSRM (Open Source Routing Machine)
-
-Machine Learning (Upcoming)
-
-Linear Regression (baseline)
-
-Random Forest Regressor (final)
-
-Frontend (Planned)
-
-React
-
-Leaflet (map visualization)
-
-WebSocket / Polling for real-time updates
-
-📊 Evaluation & Reporting (Planned)
-
-MAE / RMSE error metrics
-
-Line charts: Actual vs OSRM ETA vs ML ETA
-
-Bar charts: Model comparison
-
-Pie charts: Feature contribution
-
-Google Colab notebook + CSV datasets
-
-🚧 Roadmap
-
-✅ Section 1: Trip lifecycle + GPS streaming
-
-⏭ Section 2: OSRM routing + baseline ETA
-
-⏭ Section 3: ML delay prediction
-
-⏭ Section 4: Green corridor planning
-
-⏭ Section 5: Traffic & hospital dashboards
-
-⏭ Section 6: Real-time updates (WebSocket)
-
-⏭ Section 7: Evaluation + report assets
-
-📜 License
-
-This project is released under an open-source license and is intended for academic, research, and public-sector innovation use.
+**Bhuvanesh D**  
+Final-year B.Tech Information Technology Student  
+Software Developer Fresher | Java | Python | React | Flutter | AI/ML
